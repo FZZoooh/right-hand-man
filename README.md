@@ -97,7 +97,7 @@ pnpm tray:bg
 | 本地数据（会话库/截图/附件/日志/运行标记） | `server\data\`（`righthandman.db`、`shots\`、`attachments\`、`*.log`、`run.json`） |
 | 扩展构建产物                  | `.output\chrome-mv3\`                               |
 
-> 注：配置目录与数据库已迁移为 `righthandman`（旧的 `.config\pageask` 会在首次启动时自动复制一份，确认无误后可手动删除）。日志文件名、浏览器存储键、`[pageask]` 日志前缀和环境变量仍沿用旧名，属于内部标识符。
+> 注：配置目录与数据库已迁移为 `righthandman`（旧的 `.config\pageask` 会在首次启动时自动复制一份，确认无误后可手动删除）。
 
 ---
 
@@ -222,7 +222,7 @@ pnpm tray:bg
 | Local data (conversations, screenshots, attachments, logs, run marker) | `server\data\` (`righthandman.db`, `shots\`, `attachments\`, `*.log`, `run.json`) |
 | Extension build output                         | `.output\chrome-mv3\`                                         |
 
-> Note: the config directory and database were migrated to `righthandman` (the old `.config\pageask` is copied on first start; delete it once verified). The log filename, browser storage keys, `[pageask]` log prefix and environment variable still use the old name — internal identifiers.
+> Note: the config directory and database were migrated to `righthandman` (the old `.config\pageask` is copied on first start; delete it once verified).
 
 ---
 
