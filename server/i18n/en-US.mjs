@@ -55,6 +55,13 @@ export const messages = {
   'webui.language': 'Language',
   'webui.languageZh': 'Chinese (Simplified)',
   'webui.languageEn': 'English',
+  'webui.toolsSection': 'Search tools provider (web_search / fetch_url)',
+  'webui.toolsHint':
+    'web_search and fetch_url call the /tools endpoints on this provider; leave Base URL or API Key blank to inherit the main provider above, field by field.',
+  'webui.toolsBaseUrl': 'Base URL',
+  'webui.toolsBaseUrlPlaceholder': 'Blank = follow the main provider',
+  'webui.toolKeyHintInherit': 'Blank = use the API key of the main provider',
+  'webui.toolsTestHint': 'Testing performs one real search on this provider',
 
   // ---------------- Tool events and model-facing hints ----------------
   'chat.stopped': 'Stopped',

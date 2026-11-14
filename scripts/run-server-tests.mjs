@@ -17,6 +17,7 @@ const TESTS = [
   'test-incomplete-and-bad-body.mjs',
   'test-lifecycle-recover.mjs',
   'test-settings-webui.mjs',
+  'test-tools-provider.mjs',
   'test-ssrf.mjs',
   'test-pdf-auth.mjs',
   'test-partial-failure.mjs',

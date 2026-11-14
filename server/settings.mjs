@@ -117,6 +117,9 @@ export const DEFAULTS = {
   baseUrl: 'https://api.deepseek.com',
   model: 'deepseek-flash',
   apiKey: '',
+  // web_search / fetch_url provider; empty = inherit the main baseUrl/apiKey (per field)
+  toolsBaseUrl: '',
+  toolsApiKey: '',
   // conversation state:
   //   auto    —— with an anchor, try stateful (previous_response_id); fall back if upstream says no
   //   on      —— force stateful
@@ -137,13 +140,17 @@ function normalize(raw) {
   const baseUrl = String(raw?.baseUrl ?? DEFAULTS.baseUrl).trim().replace(/\/+$/, '') || DEFAULTS.baseUrl;
   const model = String(raw?.model ?? DEFAULTS.model).trim() || DEFAULTS.model;
   const apiKey = String(raw?.apiKey ?? '').trim();
+  // tools provider: empty stays empty (inheritance from the main provider is resolved at use time),
+  // so no default fallback here — same treatment as apiKey above
+  const toolsBaseUrl = String(raw?.toolsBaseUrl ?? '').trim().replace(/\/+$/, '');
+  const toolsApiKey = String(raw?.toolsApiKey ?? '').trim();
   const rawState = String(raw?.state ?? DEFAULTS.state).trim().toLowerCase();
   const state = STATE_MODES.includes(rawState) ? rawState : DEFAULTS.state;
   const port = Number(raw?.port ?? DEFAULTS.port);
   const validPort = Number.isInteger(port) && port >= 1 && port <= 65535 ? port : DEFAULTS.port;
   const token = String(raw?.token ?? '').trim();
   const dataDirRaw = String(raw?.dataDir ?? DEFAULTS.dataDir).trim();
-  return { baseUrl, model, apiKey, state, port: validPort, token, dataDir: dataDirRaw };
+  return { baseUrl, model, apiKey, toolsBaseUrl, toolsApiKey, state, port: validPort, token, dataDir: dataDirRaw };
 }
 
 /** last successfully parsed settings; a transient read error must not silently switch the process to defaults */
@@ -242,7 +249,8 @@ function quarantineBroken(err) {
   }
 }
 
-/** merged save: fields missing from patch stay put, `apiKey: ''` means "leave it", `clearApiKey: true` clears */
+/** merged save: fields missing from patch stay put, `apiKey: ''` means "leave it", `clearApiKey: true` clears;
+ *  the tools key follows the same rules via `toolsApiKey: ''` / `clearToolsApiKey: true` */
 export function writeSettings(patch) {
   const current = readExisting();
   const next = normalize({
@@ -253,6 +261,12 @@ export function writeSettings(patch) {
       : patch.apiKey === undefined || patch.apiKey === ''
         ? current.apiKey
         : patch.apiKey,
+    toolsBaseUrl: patch.toolsBaseUrl ?? current.toolsBaseUrl,
+    toolsApiKey: patch.clearToolsApiKey
+      ? ''
+      : patch.toolsApiKey === undefined || patch.toolsApiKey === ''
+        ? current.toolsApiKey
+        : patch.toolsApiKey,
     state: patch.state ?? current.state,
     port: patch.port ?? current.port,
     token: patch.token ?? current.token,
@@ -346,6 +360,11 @@ export function publicSettings(s) {
     state: cur.state,
     hasKey: Boolean(cur.apiKey),
     apiKeyMasked: maskKey(cur.apiKey),
+    // raw tools fields: the settings page shows what is stored; the resolved
+    // inheritance (empty → main provider) is visible via /health instead
+    toolsBaseUrl: cur.toolsBaseUrl,
+    hasToolKey: Boolean(cur.toolsApiKey),
+    toolApiKeyMasked: maskKey(cur.toolsApiKey),
     settingsFile,
     exists: existsSync(settingsFile),
   };

@@ -56,6 +56,8 @@ pnpm tray:bg
 
 “测试连接”会用当前表单里的地址、模型和 API Key（或已保存的 API Key，当该字段留空时）；点“清空 API Key”可删除已保存的 API Key。
 
+**搜索工具供应商（可选）**：`web_search`（联网搜索）和 `fetch_url`（抓取网页）两个工具默认走上方的主服务；如果所用服务商不提供 `/tools` 接口，或想给搜索单独换一家，可在“搜索工具供应商”分区单独填写 Base URL 和 API Key。两者留空时逐项沿用主服务的配置（例如只填地址，就沿用主服务的 Key），改完同样点“保存”即时生效。该分区的“测试连接”会向对方发起一次真实搜索请求。
+
 > 如果配置文件里的 `token` 不为空，侧栏“设置”里的 **访问令牌** 必须填同一个值；`token` 为空时留空。
 
 ### 4. 安装侧栏扩展（Edge / Chrome）
@@ -178,6 +180,8 @@ pnpm tray:bg
 3. Click "Save" — it takes effect immediately, with no backend restart.
 
 "Test connection" uses the URL, model, and API Key currently in the form (or the saved API Key when this field is left empty); click "Clear API Key" to delete the saved API Key.
+
+**Search tools provider (optional)**: the `web_search` and `fetch_url` tools go through the main service above by default. If your provider does not implement the `/tools` endpoints, or you want a different vendor for search, fill in a separate Base URL and API Key in the "Search tools provider" section. Leaving either field blank inherits that field from the main provider (e.g. a URL alone reuses the main API key); "Save" applies immediately. That section's "Test connection" performs one real search request against the provider.
 
 > If `token` in the config file is non-empty, the **Access token** field in the panel's Settings must contain the same value; leave it empty when `token` is empty.
 

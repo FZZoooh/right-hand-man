@@ -38,6 +38,8 @@ export function settingsPageHtml({ version, locale = DEFAULT_LOCALE }) {
   h1 { font-size: 19px; margin: 0 0 4px; }
   .sub { color: var(--muted); margin: 0 0 24px; font-size: 12.5px; }
   .card { border: 1px solid var(--line); border-radius: 12px; padding: 18px 18px 6px; background: var(--card); }
+  .card h2 { font-size: 13.5px; margin: 0 0 4px; }
+  .card + .card { margin-top: 16px; }
   .field { display: block; margin-bottom: 16px; }
   .field > span { display: block; font-weight: 600; margin-bottom: 6px; }
   input[type=text], input[type=password], select {
@@ -60,9 +62,9 @@ export function settingsPageHtml({ version, locale = DEFAULT_LOCALE }) {
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
   button.danger { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, var(--line)); }
   button:disabled { opacity: .55; cursor: default; }
-  #msg { min-height: 22px; font-size: 13px; margin: 0 0 12px; }
-  #msg.ok { color: var(--ok); }
-  #msg.err { color: var(--err); white-space: pre-wrap; }
+  #msg, #toolMsg { min-height: 22px; font-size: 13px; margin: 0 0 12px; }
+  #msg.ok, #toolMsg.ok { color: var(--ok); }
+  #msg.err, #toolMsg.err { color: var(--err); white-space: pre-wrap; }
   .meta { margin-top: 22px; color: var(--muted); font-size: 12.5px; }
   .meta code { font-size: 12px; word-break: break-all; }
   button.path {
@@ -72,7 +74,7 @@ export function settingsPageHtml({ version, locale = DEFAULT_LOCALE }) {
     word-break: break-all; vertical-align: baseline;
   }
   button.path:hover { text-decoration-style: solid; }
-  .note { color: var(--muted); font-size: 12px; margin: 12px 0 0; }
+  .note { color: var(--muted); font-size: 12px; margin: 2px 0 14px; }
 </style>
 </head>
 <body>
@@ -123,12 +125,35 @@ export function settingsPageHtml({ version, locale = DEFAULT_LOCALE }) {
     <p id="msg" role="status" aria-live="polite" aria-atomic="true"></p>
   </div>
 
+  <div class="card">
+    <h2>${t('webui.toolsSection')}</h2>
+    <p class="note">${t('webui.toolsHint')}</p>
+    <label class="field">
+      <span>${t('webui.toolsBaseUrl')}</span>
+      <input id="toolsBaseUrl" type="text" spellcheck="false" placeholder="${t('webui.toolsBaseUrlPlaceholder')}">
+    </label>
+
+    <label class="field">
+      <span>${t('webui.apiKey')}</span>
+      <input id="toolsApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="${t('webui.apiKeyPlaceholderMissing')}">
+      <small id="toolKeyHint">${t('webui.toolKeyHintInherit')}</small>
+    </label>
+
+    <div class="row">
+      <button id="testTools" type="button">${t('webui.test')}</button>
+      <button class="danger" id="clearToolKey" type="button" hidden>${t('webui.clearKey')}</button>
+    </div>
+    <small>${t('webui.toolsTestHint')}</small>
+    <p id="toolMsg" role="status" aria-live="polite" aria-atomic="true"></p>
+  </div>
+
   <p class="meta">
     ${t('webui.metaFile')}<button type="button" class="path" id="file" title="${t('webui.openFile')}">…</button><br>
     ${t('webui.metaProvider')}<code id="hBase">…</code><br>
     ${t('webui.metaModel')}<code id="hModel">…</code><br>
     ${t('webui.metaKey')}<code id="hKey">…</code><br>
-    ${t('webui.metaState')}<code id="hState">…</code>
+    ${t('webui.metaState')}<code id="hState">…</code><br>
+    ${t('webui.metaTools')}<code id="hTools">…</code>
   </p>
 </main>
 
@@ -199,6 +224,12 @@ function fill(view) {
   $('keyHint').textContent = view.hasKey ? m('webui.keyHintKeep') : m('webui.keyHintNeed');
   $('clearKey').hidden = !view.hasKey;
   $('hKey').textContent = view.hasKey ? m('webui.keyConfigured') : m('webui.keyMissing');
+  $('toolsBaseUrl').value = view.toolsBaseUrl || '';
+  $('toolsApiKey').placeholder = view.hasToolKey
+    ? m('webui.apiKeyPlaceholderSet', { masked: view.toolApiKeyMasked })
+    : m('webui.apiKeyPlaceholderMissing');
+  $('toolKeyHint').textContent = view.hasToolKey ? m('webui.keyHintKeep') : m('webui.toolKeyHintInherit');
+  $('clearToolKey').hidden = !view.hasToolKey;
 }
 
 async function load() {
@@ -214,6 +245,8 @@ async function load() {
     $('hModel').textContent = h.model || '';
     $('hKey').textContent = h.hasKey ? m('webui.keyConfigured') : m('webui.keyMissing');
     $('hState').textContent = h.statefulActive ? m('webui.stateful') : m('webui.stateless');
+    // /health reports the resolved tools provider (inheritance already applied)
+    $('hTools').textContent = h.toolsBaseUrl || '';
   } catch (err) {
     const text = err.status === 401
       ? m('webui.healthTokenRequired')
@@ -221,6 +254,7 @@ async function load() {
     $('hBase').textContent = text;
     $('hModel').textContent = '';
     $('hState').textContent = '';
+    $('hTools').textContent = '';
   }
 }
 
@@ -233,8 +267,11 @@ $('save').onclick = async () => {
       model: $('model').value,
       state: $('state').value,
       apiKey: $('apiKey').value,
+      toolsBaseUrl: $('toolsBaseUrl').value,
+      toolsApiKey: $('toolsApiKey').value,
     });
     $('apiKey').value = '';
+    $('toolsApiKey').value = '';
     fill(view);
     setMsg(m('webui.saved'), 'ok');
   } catch (err) {
@@ -278,6 +315,48 @@ $('clearKey').onclick = async () => {
     setMsg(m('webui.clearFailed', { message: err.message }), 'err');
   } finally {
     $('clearKey').disabled = false;
+  }
+};
+
+const toolMsg = $('toolMsg');
+function setToolMsg(text, kind) {
+  toolMsg.textContent = text || '';
+  toolMsg.className = kind || '';
+}
+
+$('testTools').onclick = async () => {
+  $('testTools').disabled = true;
+  setToolMsg(m('webui.testing'), '');
+  try {
+    const r = await api('/api/settings/test-tools', {
+      toolsBaseUrl: $('toolsBaseUrl').value,
+      toolsApiKey: $('toolsApiKey').value,
+    });
+    if (r.ok) {
+      setToolMsg(m('webui.testOk', { detail: r.detail }), 'ok');
+    } else {
+      const detail = r.code && M['error.' + r.code] ? m('error.' + r.code, r.params || {}) : r.detail;
+      setToolMsg(m('webui.testFail', { detail }), 'err');
+    }
+  } catch (err) {
+    setToolMsg(m('webui.testError', { message: err.message }), 'err');
+  } finally {
+    $('testTools').disabled = false;
+  }
+};
+
+$('clearToolKey').onclick = async () => {
+  if (!confirm(m('webui.clearConfirm'))) return;
+  $('clearToolKey').disabled = true;
+  try {
+    const view = await api('/api/settings', { clearToolsApiKey: true });
+    $('toolsApiKey').value = '';
+    fill(view);
+    setToolMsg(m('webui.cleared'), 'ok');
+  } catch (err) {
+    setToolMsg(m('webui.clearFailed', { message: err.message }), 'err');
+  } finally {
+    $('clearToolKey').disabled = false;
   }
 };
 

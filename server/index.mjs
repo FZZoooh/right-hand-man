@@ -282,7 +282,11 @@ async function handle(req, res) {
     return res.end(html);
   }
 
-  if (url.pathname === '/api/settings' || url.pathname === '/api/settings/test') {
+  if (
+    url.pathname === '/api/settings' ||
+    url.pathname === '/api/settings/test' ||
+    url.pathname === '/api/settings/test-tools'
+  ) {
     if (!allowSettingsRequest(req)) return sendJson(res, 403, errorPayload('auth.forbidden'));
   }
 
@@ -313,6 +317,25 @@ async function handle(req, res) {
           return sendJson(res, 400, errorPayload('settings.invalid_base_url'));
         }
       }
+      // tools provider; unlike the main baseUrl an empty draft is meaningful ("inherit the main
+      // provider"), so a present-but-empty string clears it, while an absent field stays untouched
+      let toolsBaseUrl;
+      if (typeof body?.toolsBaseUrl === 'string') {
+        const draft = body.toolsBaseUrl.trim();
+        if (!draft) {
+          toolsBaseUrl = '';
+        } else {
+          try {
+            const u = new URL(draft);
+            if (!/^https?:$/.test(u.protocol) || u.username || u.password || u.search || u.hash) {
+              throw new Error('bad tools base url');
+            }
+            toolsBaseUrl = u.href.replace(/\/+$/, '');
+          } catch {
+            return sendJson(res, 400, errorPayload('settings.invalid_base_url'));
+          }
+        }
+      }
       if (body?.state !== undefined && !STATE_MODES.includes(body.state)) {
         return sendJson(res, 400, errorPayload('settings.invalid_state', { modes: STATE_MODES.join(' / ') }));
       }
@@ -321,6 +344,9 @@ async function handle(req, res) {
         model: typeof body?.model === 'string' ? body.model.trim() || undefined : undefined,
         apiKey: typeof body?.apiKey === 'string' ? body.apiKey.trim() : undefined,
         clearApiKey: body?.clearApiKey === true,
+        toolsBaseUrl,
+        toolsApiKey: typeof body?.toolsApiKey === 'string' ? body.toolsApiKey.trim() : undefined,
+        clearToolsApiKey: body?.clearToolsApiKey === true,
         state: typeof body?.state === 'string' ? body.state : undefined,
       });
       logEvent('settings.saved', { baseUrl: saved.baseUrl, model: saved.model, state: saved.state, hasKey: Boolean(saved.apiKey) });
@@ -390,6 +416,57 @@ async function handle(req, res) {
     }
   }
 
+  // POST /api/settings/test-tools: probe the web_search/fetch_url provider with one real tiny search
+  // (GET /models would pass on providers that lack /tools/* entirely). Same draft semantics as
+  // /api/settings/test; an empty draft field falls back to the stored one, and the key also falls
+  // back to the main apiKey — mirroring exactly how the tool loop resolves the inheritance.
+  if (req.method === 'POST' && url.pathname === '/api/settings/test-tools') {
+    let body = {};
+    try {
+      body = (await readJson(req, 16 * 1024)) ?? {};
+    } catch {
+      return sendJson(res, 400, errorPayload('request.bad_body'));
+    }
+    const current = readSettings();
+    let baseUrl = current.toolsBaseUrl || current.baseUrl;
+    if (typeof body.toolsBaseUrl === 'string' && body.toolsBaseUrl.trim()) {
+      try {
+        const u = new URL(body.toolsBaseUrl.trim());
+        if (!/^https?:$/.test(u.protocol) || u.username || u.password || u.search || u.hash) {
+          throw new Error('bad base url');
+        }
+        baseUrl = u.href.replace(/\/+$/, '');
+      } catch {
+        return sendJson(res, 400, errorPayload('settings.invalid_base_url'));
+      }
+    }
+    const apiKey =
+      typeof body.toolsApiKey === 'string' && body.toolsApiKey.trim()
+        ? body.toolsApiKey.trim()
+        : current.toolsApiKey || current.apiKey;
+    if (!apiKey) {
+      return sendJson(res, 200, { ok: false, code: 'settings.missing_api_key' });
+    }
+    const started = Date.now();
+    try {
+      const r = await fetch(`${withV1(baseUrl)}/tools/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        // same shape web_search sends, with the smallest query that stays inside the 1-128 char rule
+        body: JSON.stringify({ query: 'ping', count: 1, need_content: false }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      // Drain but never echo the upstream payload (see /api/settings/test).
+      await readErrorDetail(r);
+      const detail = `HTTP ${r.status}, ${Date.now() - started} ms`;
+      const failure = r.ok ? {} : { code: 'upstream.status', params: { status: r.status } };
+      return sendJson(res, 200, { ok: r.ok, status: r.status, detail, baseUrl, ...failure });
+    } catch (err) {
+      logError('settings_test_tools_failed', err);
+      return sendJson(res, 200, { ok: false, code: 'settings.test_failed', baseUrl });
+    }
+  }
+
   // the settings page reads /health for the runtime status at the bottom; with a token on, same-origin still passes
   if (TOKEN && !checkToken(req) && !(url.pathname === '/health' && sameOriginRequest(req))) {
     return sendJson(res, 401, errorPayload('auth.bad_token'));
@@ -403,6 +480,9 @@ async function handle(req, res) {
       model: s.model,
       baseUrl: s.baseUrl,
       hasKey: Boolean(s.apiKey),
+      // web_search/fetch_url provider as actually resolved (empty config inherits the main one)
+      toolsBaseUrl: s.toolsBaseUrl || s.baseUrl,
+      hasToolKey: Boolean(s.toolsApiKey || s.apiKey),
       state: s.state,
       // whether stateful is actually used: config allows it, endpoint looks right, and this process hasn't been burned
       statefulActive:
@@ -1015,8 +1095,10 @@ async function handleChat(req, res) {
       readBytes: (row) => readFileSync(join(attachmentsDir, row.file)),
     },
     workspace: workspaceFor(conv.id),
-    apiKey: cfg.apiKey,
-    baseUrl: cfg.baseUrl,
+    // Only web_search/fetch_url consume these: they call the provider's /tools/* endpoints, so
+    // they may run on a separate vendor (toolsBaseUrl/toolsApiKey, empty = inherit the main one).
+    apiKey: cfg.toolsApiKey || cfg.apiKey,
+    baseUrl: cfg.toolsBaseUrl || cfg.baseUrl,
     signal: controller.signal,
   };
 

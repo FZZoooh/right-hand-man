@@ -56,6 +56,12 @@ export const messages = {
   'webui.language': '界面语言',
   'webui.languageZh': '简体中文',
   'webui.languageEn': 'English',
+  'webui.toolsSection': '搜索工具供应商（web_search / fetch_url）',
+  'webui.toolsHint': 'web_search 与 fetch_url 调用该供应商的 /tools 接口；Base URL 或 API Key 留空时，逐项沿用上方主服务的配置。',
+  'webui.toolsBaseUrl': 'Base URL',
+  'webui.toolsBaseUrlPlaceholder': '留空则跟随主服务',
+  'webui.toolKeyHintInherit': '留空则使用主服务的 API Key',
+  'webui.toolsTestHint': '测试会对该供应商发起一次真实搜索',
 
   // ---------------- 工具事件与模型侧提示 ----------------
   'chat.stopped': '已停止',
