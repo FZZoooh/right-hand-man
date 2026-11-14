@@ -47,6 +47,7 @@ export const messages = {
   'webui.metaModel': 'Model: ',
   'webui.metaKey': 'API key: ',
   'webui.metaState': 'Responses API: ',
+  'webui.metaTools': 'Tools provider: ',
   'webui.keyConfigured': 'Configured',
   'webui.keyMissing': 'Missing',
   'webui.stateful': 'Stateful',

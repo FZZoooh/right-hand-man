@@ -48,6 +48,7 @@ export const messages = {
   'webui.metaModel': '模型：',
   'webui.metaKey': 'API Key：',
   'webui.metaState': 'Responses API 功能：',
+  'webui.metaTools': '工具供应商：',
   'webui.keyConfigured': '已配置',
   'webui.keyMissing': '缺失',
   'webui.stateful': '有状态',

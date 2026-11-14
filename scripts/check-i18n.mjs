@@ -342,6 +342,28 @@ async function checkErrorCodes() {
   }
 }
 
+// The settings page reads dictionary keys through t() / m() literals in webui.mjs. Key alignment
+// between the dictionaries cannot see a key missing from all of them at once (the page would
+// render the key itself — this actually happened with webui.metaTools), so check the template
+// against zh-CN directly; en-US/en-XA are kept aligned by checkLocales().
+async function checkWebuiKeys() {
+  const zh = await loadDict('server/i18n/zh-CN.mjs');
+  const text = readFileSync('server/webui.mjs', 'utf8');
+  const used = [...text.matchAll(/\b(?:t|m)\(\s*'([\w.]+)'/g)].map((match) => match[1]);
+  if (used.length === 0) {
+    // A regex/renaming regression must fail loudly instead of scanning nothing.
+    fail('server/webui.mjs', 0, '未在 webui.mjs 扫到任何 t()/m() 字面量 key（扫描正则可能失效）');
+    return;
+  }
+  for (const key of new Set(used)) {
+    // `'error.' + code` concatenations surface as the bare prefix; error codes have their own check
+    if (key.endsWith('.')) continue;
+    if (!(key in zh.default)) {
+      fail('server/webui.mjs', 0, `使用了字典里不存在的 key：${key}`);
+    }
+  }
+}
+
 async function checkLocales() {
   const zh = await loadDict('server/i18n/zh-CN.mjs');
   const en = await loadDict('server/i18n/en-US.mjs');
@@ -424,6 +446,7 @@ async function main() {
   checkHardcodedChinese();
   await checkErrorCodes();
   await checkLocales();
+  await checkWebuiKeys();
   await checkTrayKeys();
 
   if (problems.length > 0) {
@@ -431,7 +454,7 @@ async function main() {
     for (const p of problems) console.error(`  ${p}`);
     process.exitCode = 1;
   } else {
-    console.log('✓ i18n 检查通过（硬编码中文、错误码、locale、托盘 key）');
+    console.log('✓ i18n 检查通过（硬编码中文、错误码、locale、设置页 key、托盘 key）');
   }
 }
 
