@@ -83,9 +83,9 @@ export const messages = {
   'tool.detail.failed': 'Failed',
   'tool.abortedBody': 'The user stopped the turn while this tool was running.',
   'tool.timeoutBody':
-    'Tool {name} did not return within {seconds}s and was abandoned. Retry with a smaller range, or tell the user it is unavailable.',
+    'Tool {name} exceeded the {seconds}s response timeout and has been aborted. Please retry with a narrower range, or explicitly inform the user that the requested information cannot be retrieved.',
   'tool.failedBody':
-    'Tool {name} failed: {message}. Retry with different arguments, or tell the user this information is unavailable.',
+    'Tool {name} failed to execute: {message}. Please retry with modified arguments, or explicitly inform the user that this information cannot be retrieved.',
   'tool.breakBody': '{count} consecutive tool calls failed; the remaining tools in this turn were disabled.',
   'tool.notRunBody': 'The user stopped this turn, so this tool did not run.',
 

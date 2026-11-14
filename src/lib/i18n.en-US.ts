@@ -218,7 +218,7 @@ export const enUS = {
   'error.conversation.not_found': 'Chat not found',
   'error.conversation.busy': 'This turn is still generating; try again later',
   'error.conversation.no_pending': 'No pending question to recover',
-  'error.settings.invalid_base_url': 'Upstream URL must start with http:// or https://',
+  'error.settings.invalid_base_url': 'Base URL must start with http:// or https://',
   'error.settings.invalid_state': 'Invalid session state (allowed: {modes})',
   'error.settings.missing_api_key':
     'No API key configured: open {settingsUrl} to add one (or choose "Configure…" from the tray menu)',
@@ -283,7 +283,7 @@ export const enUS = {
   'settings.pasteAsFile': 'Paste long text as an attachment',
   'settings.pasteAsFileHint': 'Plain text pasted at or above the threshold becomes a .txt attachment instead of going into the input box',
   'settings.pasteAsFileBytes': 'Long-text threshold (bytes)',
-  'settings.pasteAsFileBytesHint': 'Counted as UTF-8: a Latin letter is 1 byte, a CJK character usually 3',
+  'settings.pasteAsFileBytesHint': 'Counted as UTF-8; a letter is usually 1 byte',
   'settings.pasteAsFileBytesInvalid': 'The long-text threshold must be a positive whole number',
   'answer.thinking': 'Thinking',
   'answer.truncated': 'This turn was interrupted; the answer may be incomplete',

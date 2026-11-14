@@ -82,8 +82,8 @@ export const messages = {
   'tool.detail.timeout': '超时',
   'tool.detail.failed': '失败',
   'tool.abortedBody': '用户在工具执行期间停止了这一轮。',
-  'tool.timeoutBody': '工具 {name} 超过 {seconds} 秒没有返回，已放弃。可以换个更小的范围重试，或直接说明拿不到。',
-  'tool.failedBody': '工具 {name} 执行失败：{message}。可以换个参数重试，或直接说明拿不到这项信息。',
+  'tool.timeoutBody': '工具 {name} 响应超时（已超过 {seconds} 秒），本次调用已中止。建议缩小处理范围后重试，或明确说明无法获取相关结果。',
+  'tool.failedBody': '工具 {name} 执行失败：{message}。建议调整调用参数后重试，或明确说明无法获取该项信息。',
   'tool.breakBody': '连续 {count} 个工具调用失败，本轮剩余工具已熔断。',
   'tool.notRunBody': '用户已中止本轮，这个工具没有执行。',
 
