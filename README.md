@@ -73,7 +73,7 @@ pnpm tray:bg
 
 - **打开侧栏**：在任意网页或 PDF 阅读器中 **右键 → 选择“询问 RightHandMan”**，或直接点击浏览器工具栏的 RightHandMan 图标。
 - **提问交互**：直接在输入框中提问即可；支持就当前视口和选中的文字（PDF 支持受限）提问，可引用回复。
-- **附件**：点输入框左侧的 **+**，或把文件拖入 / 粘贴到输入区，即可附上图片、PDF、Word/Excel/PowerPoint（`.docx`/`.xlsx`/`.pptx`）和纯文本文件（每条消息最多 10 个，单个不超过 20 MB）。图片直接随消息发给模型，文档由模型按需读取；也可以只发附件不写文字。编辑消息时同样可以增删附件。粘贴的纯文本达到设置中的阈值（默认 10000 字节，按 UTF-8 计）时，会自动转为 `.txt` 附件，可在扩展设置里关闭或调整阈值。附件保存在后端，删除会话时一并删除。
+- **附件**：支持图片、PDF、Word/Excel/PowerPoint（`.docx`/`.xlsx`/`.pptx`）和纯文本文件等格式的附件（每条消息最多 10 个，单个不超过 20 MB）。粘贴的纯文本达到设置中的阈值（默认 10000 字节）时，会自动转为 `.txt` 附件，可在扩展设置里关闭或调整阈值。附件保存在后端，删除会话时一并删除。
 - **对话工作区**：每个会话均配有独立的工作区，模型可在其中创建、读取与修改文件（如撰写报告、整理数据、编辑代码），亦可将附件复制到工作区以编辑；暂不支持非文本格式文件。删除会话也会同时删除对应工作区。
 - **文件卡片**：模型保存文件后，可在回答中展示文件卡片以供在线预览或下载。卡片始终呈现文件的最新内容，历史消息中的卡片亦然。编辑或重新生成消息不会回滚已保存的文件。
 - **系统托盘**：若使用 `pnpm tray:bg` 启动，系统托盘右键菜单提供服务启停、配置修改、开机自启切换以及日志查看等功能。
@@ -201,7 +201,7 @@ pnpm tray:bg
 
 - **Open the panel**: on any web page or PDF viewer, **right-click → "Ask RightHandMan"**, or click the RightHandMan icon in the toolbar.
 - **Asking questions**: simply type your question in the input box; supports asking about the current viewport and selected text (limited support for PDF), and quoting replies.
-- **Attachments**: click the **+** at the left of the input, or drag / paste files into the composer, to attach images, PDFs, Word/Excel/PowerPoint (`.docx`/`.xlsx`/`.pptx`) and plain-text files (up to 10 per message, 20 MB each). Images go to the model with the message; documents are read by the model on demand. A message may carry attachments without any text, and editing a message can add or remove them too. Plain text pasted at or above the threshold (10000 UTF-8 bytes by default) becomes a `.txt` attachment; turn it off or change the threshold in the extension settings. The backend keeps a copy of each file and deletes it with the conversation.
+- **Attachments**: images, PDFs, Word/Excel/PowerPoint (`.docx`/`.xlsx`/`.pptx`) and plain-text files can be attached (up to 10 per message, 20 MB each). Plain text pasted at or above the threshold (10000 bytes by default) becomes a `.txt` attachment; turn it off or change the threshold in the extension settings. The backend keeps a copy of each file and deletes it with the conversation.
 - **Conversation workspace**: each conversation has its own workspace, where the model can create, read, and edit files (writing a report, organizing data, editing code); attachments can be copied into the workspace for further editing. Only text-based files are supported currently. The workspace is cleared when the conversation is deleted.
 - **File cards**: once the model saves a file, a file card can be shown in the answer, which can be previewed and downloaded. A card always shows the latest content of its file, including cards in earlier messages; editing or regenerating a message does not roll back saved files.
 - **System tray**: when started with `pnpm tray:bg`, the tray context menu offers service start/stop, configuration, start-at-login and log viewing.
