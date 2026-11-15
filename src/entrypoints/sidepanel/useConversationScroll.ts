@@ -88,6 +88,14 @@ function createScrollController(refs: ScrollRefs, setShowScrollBtn: (show: boole
     centerLockUntil.current = 0;
   };
 
+  /** Re-baseline the growth bookkeeping after an outside layout change (e.g. the top reserve
+   * animating while a dropdown panel opens) — otherwise the next reconcile sees the shift as
+   * phantom content growth and starts absorbing it into the bottom spacer. */
+  const syncContentHeight = () => {
+    const el = refs.list.current;
+    if (el) contentHeight.current = el.scrollHeight - spacerHeight.current;
+  };
+
   const scrollToBottom = () => {
     const el = refs.list.current;
     if (!el) return;
@@ -292,6 +300,7 @@ function createScrollController(refs: ScrollRefs, setShowScrollBtn: (show: boole
     scrollTo,
     animateScrollTo,
     clearCenterLock,
+    syncContentHeight,
     scrollToBottom,
     refreshScrollBtn,
     animateLeadTo,
@@ -448,6 +457,9 @@ export function useConversationScroll({
     prepareSend: scroll.prepareSend,
     conversationAssigned: scroll.conversationAssigned,
     clearCenterLock: scroll.clearCenterLock,
+    syncContentHeight: scroll.syncContentHeight,
+    refreshScrollBtn: scroll.refreshScrollBtn,
+    scrollTo: scroll.scrollTo,
     scrollToBottom: scroll.scrollToBottom,
     resetScroll: scroll.reset,
     followBottom: scroll.followBottom,

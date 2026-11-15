@@ -1,6 +1,17 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { MarkdownView } from '@/components/MarkdownView';
-import { IconArrowDown, IconCheck, IconCopy, IconEdit, IconQuote, IconQuoteMark, IconReload } from '@/components/icons';
+import {
+  IconArrowDown,
+  IconCheck,
+  IconCopy,
+  IconEdit,
+  IconHistory,
+  IconNewChat,
+  IconQuote,
+  IconQuoteMark,
+  IconReload,
+  IconSettings,
+} from '@/components/icons';
 import {
   getConversation,
   deleteConversation,
@@ -160,6 +171,11 @@ export default function App() {
   const [pageState, setPageState] = useState<PageState>({ kind: 'loading' });
   const [showPageText, setShowPageText] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Height of the floating page card (or page-failure card): the conversation list reserves this
+  // much top space so the first messages are never hidden behind the overlay at scroll top.
+  const [pageFloatH, setPageFloatH] = useState(0);
+  // Height of the open dropdown panel (0 when both are closed), measured on the .hd-drop strip.
+  const [dropH, setDropH] = useState(0);
 
   const [settings, setSettings] = useState<Settings | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -206,7 +222,10 @@ export default function App() {
   const composerTransitionRef = useRef<{ height: number; backdrop: number } | null>(null);
   const composerExpandingRef = useRef(false);
   const composerModeFromRef = useRef<number | null>(null);
-  const headerRef = useRef<HTMLElement | null>(null);
+  // On the .hd-area wrapper, not <header> itself: the wrapper is the offsetParent of the floating
+  // panels and its offsetTop/offsetHeight equal the header's (absolute panels add no height),
+  // while <header>.parentElement would now be the wrapper instead of .app.
+  const headerRef = useRef<HTMLDivElement | null>(null);
   const [composerSpace, setComposerSpace] = useState({ height: 0, width: 0 });
   const requestComposerExpanded = useCallback((next: boolean) => {
     if (next === composerExpandedRef.current) return;
@@ -301,6 +320,8 @@ export default function App() {
 
   const toggleHistory = useCallback(() => {
     requestComposerExpanded(false);
+    // Both panels are overlays at the same anchor — keep them mutually exclusive.
+    setSettingsOpen(false);
     const next = !historyOpen;
     setHistoryOpen(next);
     // Opening the panel is also a retry: a backend that was down when the tab loaded may be back now.
@@ -565,6 +586,9 @@ export default function App() {
     prepareSend,
     conversationAssigned,
     clearCenterLock,
+    syncContentHeight,
+    refreshScrollBtn,
+    scrollTo,
     scrollToBottom,
     resetScroll,
     followBottom,
@@ -1378,7 +1402,7 @@ export default function App() {
   }, []);
   useLayoutEffect(() => {
     const header = headerRef.current;
-    const app = header?.parentElement;
+    const app = header?.closest<HTMLElement>('.app') ?? null;
     if (!header || !app) return;
     const measure = () => {
       // The floating overlay must start at the header's bottom edge, not 8px below: the page card
@@ -1398,6 +1422,115 @@ export default function App() {
     observer.observe(header);
     return () => observer.disconnect();
   }, []);
+
+  // The page card / page-failure card floats above the conversation. Two measurements drive the
+  // layout: the open dropdown panel's height (dropH) and the card's collapsed height (pageFloatH —
+  // the expanded page-text preview is an overlay the user deliberately opened, so it does not grow
+  // the reservation). The card sits dropH below the list top and the list reserves
+  // dropH + cardH + 8 of top padding, so the header → panel → card → message chain keeps its gaps
+  // and nothing is hidden at scroll top.
+  const pageFloatRef = useRef<HTMLDivElement | null>(null);
+  const dropRef = useRef<HTMLDivElement | null>(null);
+  const showPageTextRef = useRef(false);
+  showPageTextRef.current = showPageText;
+  useLayoutEffect(() => {
+    const el = pageFloatRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') {
+      setPageFloatH(0);
+      return;
+    }
+    const measure = () => {
+      if (!showPageTextRef.current) setPageFloatH(el.offsetHeight);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [pageState, verbose]);
+
+  useLayoutEffect(() => {
+    const el = dropRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') {
+      setDropH(0);
+      return;
+    }
+    const measure = () => setDropH(el.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // When a dropdown opens/closes, the card and the reserved top space glide together (same 140ms
+  // easeOutExpo as the panel drop-in) instead of jumping. The scroll position is compensated per
+  // frame: at the top everything slides as one chain, deeper down the reading content stays put
+  // while the card glides over it like any overlay. Both values are applied imperatively —
+  // render-driven styles would snap when a streaming re-render lands mid-animation.
+  const reserveRef = useRef(0);
+  const cardTopRef = useRef(0);
+  const prevDropHRef = useRef<number | null>(null);
+  const reserveAnimRef = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    if (reserveAnimRef.current != null) {
+      cancelAnimationFrame(reserveAnimRef.current);
+      reserveAnimRef.current = null;
+    }
+    const targetTop = dropH;
+    const targetReserve = pageFloatH > 0 ? dropH + pageFloatH + 8 : 0;
+    const fromReserve = reserveRef.current;
+    const fromTop = cardTopRef.current;
+    const apply = (pad: number, top: number) => {
+      reserveRef.current = pad;
+      cardTopRef.current = top;
+      el.style.paddingTop = pad > 0 ? `${Math.round(pad)}px` : '';
+      if (pageFloatRef.current) pageFloatRef.current.style.top = `${Math.round(top)}px`;
+      syncContentHeight();
+      refreshScrollBtn(el);
+    };
+
+    const dropChanged = prevDropHRef.current !== null && prevDropHRef.current !== dropH;
+    prevDropHRef.current = dropH;
+    const instant =
+      !dropChanged ||
+      pageFloatH === 0 ||
+      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    if (instant) {
+      // Growing without animation: scroll along so the reading content stays put; shrinking needs
+      // nothing — the browser clamps scrollTop as the content pulls up.
+      const grow = targetReserve - fromReserve;
+      apply(targetReserve, targetTop);
+      if (grow > 0) scrollTo(el, el.scrollTop + Math.min(grow, el.scrollTop));
+      return;
+    }
+
+    const delta = targetReserve - fromReserve;
+    const startTop = el.scrollTop;
+    const shift = delta > 0 ? Math.min(delta, startTop) : 0;
+    const start = performance.now();
+    const duration = 140;
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / duration);
+      const eased = p >= 1 ? 1 : 1 - Math.pow(2, -10 * p);
+      apply(fromReserve + delta * eased, fromTop + (targetTop - fromTop) * eased);
+      if (shift > 0) scrollTo(el, startTop + shift * eased);
+      if (p < 1) {
+        reserveAnimRef.current = requestAnimationFrame(tick);
+      } else {
+        reserveAnimRef.current = null;
+        apply(targetReserve, targetTop);
+        if (shift > 0) scrollTo(el, startTop + shift);
+      }
+    };
+    reserveAnimRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (reserveAnimRef.current != null) {
+        cancelAnimationFrame(reserveAnimRef.current);
+        reserveAnimRef.current = null;
+      }
+    };
+  }, [dropH, pageFloatH, scrollTo, syncContentHeight]);
 
   // Measure natural text height before applying flex fill or interpolating the whole box. Expanded
   // mode never auto-collapses on short text — the button, send, and leaving the page collapse it.
@@ -1501,90 +1634,115 @@ export default function App() {
 
   return (
     <div className="app">
-      <header ref={headerRef} className="hd">
+      {/* The header stays in flow; the settings/history panels below drop as absolute overlays
+          (anchored to this wrapper's bottom edge), so opening them never squeezes the list. */}
+      <div ref={headerRef} className="hd-area">
+      <header className="hd">
         {/* Top left: current conversation title (auto-title writes it after the first answer; blank until then) */}
         <div className={`hd-title${titlePulse ? " in" : ""}`} title={currentTitle} onAnimationEnd={() => setTitlePulse(false)}>
           {currentTitle}
         </div>
         <div className="hd-right">
+          {/* Icon-only buttons: the accessible name comes from aria-label, the hover tooltip from title */}
           <button
-            className="ghost"
+            className="ghost hd-btn"
             onClick={newConversation}
             disabled={busy || messages.length === 0}
             title={t('header.newChat.title')}
+            aria-label={t('header.newChat')}
           >
-            {t('header.newChat')}
+            <IconNewChat />
           </button>
           <button
-            className={`ghost ${historyOpen ? 'on' : ''}`}
+            className={`ghost hd-btn ${historyOpen ? 'on' : ''}`}
             onClick={toggleHistory}
             disabled={!pageUrl || busy}
             title={t('header.history.title')}
+            aria-label={t('header.history')}
           >
-            {conversations.length
-              ? t('history.titleWithCount', { count: conversations.length })
-              : t('header.history')}
+            <IconHistory />
+            {conversations.length > 0 && <span className="hd-badge">{conversations.length}</span>}
           </button>
           <button
-            className={`ghost ${settingsOpen ? 'on' : ''}`}
+            className={`ghost hd-btn ${settingsOpen ? 'on' : ''}`}
             onClick={() => {
               requestComposerExpanded(false);
+              // Both panels are overlays at the same anchor — keep them mutually exclusive.
+              setHistoryOpen(false);
               setSettingsOpen((v) => !v);
             }}
             title={t('header.settings.title')}
+            aria-label={t('header.settings')}
           >
-            {t('header.settings')}
+            <IconSettings />
           </button>
-          <button className="ghost" onClick={() => void load()} disabled={pageState.kind === 'loading'}>
-            {pageState.kind === 'loading' ? '…' : t('header.reload')}
+          <button
+            className="ghost hd-btn"
+            onClick={() => void load()}
+            disabled={pageState.kind === 'loading'}
+            title={t('header.reload')}
+            aria-label={t('header.reload')}
+          >
+            {/* The `…` placeholder survives the iconization: it still says "reading" without text labels */}
+            {pageState.kind === 'loading' ? '…' : <IconReload />}
           </button>
         </div>
       </header>
 
-      {settingsOpen && settings && (
-        <SettingsPanel
-          value={settings}
-          showToast={showToast}
-          onDone={(next) => {
-            setLocale(resolveLocale(next.locale));
-            setSettings(next);
-            setSettingsOpen(false);
-          }}
-          onClose={() => setSettingsOpen(false)}
-        />
-      )}
+      {/* Panels drop as one strip anchored under the header; its height (= the open panel) drives
+          the page card's glide and the list's reserved top space (see the reserve animator). */}
+      <div ref={dropRef} className="hd-drop">
+        {settingsOpen && settings && (
+          <SettingsPanel
+            value={settings}
+            showToast={showToast}
+            onDone={(next) => {
+              setLocale(resolveLocale(next.locale));
+              setSettings(next);
+              setSettingsOpen(false);
+            }}
+            onClose={() => setSettingsOpen(false)}
+          />
+        )}
 
-      {historyOpen && (
-        <HistoryPanel
-          conversations={conversations}
-          conversationId={conversationId}
-          busy={busy}
-          onOpen={(id) => void openConversation(id)}
-          onDelete={(id) => void removeConversation(id)}
-        />
-      )}
-
-      {/* Page card: one line by default so it doesn't crowd the conversation; not rendered in clean mode */}
-      {pageState.kind === 'ready' && verbose && (
-        <PageCard
-          page={pageState.page}
-          open={showPageText}
-          copied={copied}
-          onToggle={() => setShowPageText((v) => !v)}
-          onCopy={() => void handleCopy()}
-        />
-      )}
-
-      {pageState.kind === 'failed' && (
-        <section className="card error">
-          <div className="card-title">{t('page.failure.title')}</div>
-          <p>{t(REASON_HINT[pageState.failure.reason])}</p>
-          <pre className="raw">{pageState.failure.message}</pre>
-        </section>
-      )}
+        {historyOpen && (
+          <HistoryPanel
+            conversations={conversations}
+            conversationId={conversationId}
+            busy={busy}
+            onOpen={(id) => void openConversation(id)}
+            onDelete={(id) => void removeConversation(id)}
+          />
+        )}
+      </div>
+      </div>
 
       {/* Conversation area */}
       <div className="list-wrap">
+      {/* Page card and page-failure card float above the conversation; the list reserves the
+          collapsed card's height as top padding so nothing is hidden behind it at scroll top */}
+      {pageState.kind === 'ready' && verbose && (
+        <div className="page-float" ref={pageFloatRef}>
+          <PageCard
+            page={pageState.page}
+            open={showPageText}
+            copied={copied}
+            onToggle={() => setShowPageText((v) => !v)}
+            onCopy={() => void handleCopy()}
+          />
+        </div>
+      )}
+
+      {pageState.kind === 'failed' && (
+        <div className="page-float" ref={pageFloatRef}>
+          <section className="card error">
+            <div className="card-title">{t('page.failure.title')}</div>
+            <p>{t(REASON_HINT[pageState.failure.reason])}</p>
+            <pre className="raw">{pageState.failure.message}</pre>
+          </section>
+        </div>
+      )}
+
       <div
         className="list"
         ref={listRef}

@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import katex from 'katex';
 import Markdown, { type Components } from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkBreaks from 'remark-breaks';
@@ -21,9 +22,9 @@ import { t } from '@/lib/i18n';
 import { remarkArtifactTags, splitArtifactMarkdown } from '@/lib/artifact-tags.mjs';
 import type { ArtifactContext } from '@/lib/artifacts';
 import { ArtifactCard } from './ArtifactCard';
-import { IconCheck, IconCopy } from './icons';
+import { IconCheck, IconClose, IconCopy, IconQuote } from './icons';
 
-// Keep the MathML annotation: it carries the original TeX, which the formula menu copies and quotes.
+// Keep the MathML annotation: it carries the original TeX, which the formula popup copies and quotes.
 const remarkPlugins = [remarkGfm, remarkMath, remarkBreaks];
 const rehypePlugins = [[rehypeKatex, { throwOnError: false, strict: false, output: 'htmlAndMathml' }]] as const;
 
@@ -254,7 +255,7 @@ const MarkdownBlock = memo(function MarkdownBlock({ text, artifacts = false }: {
   );
 });
 
-type MathMenu = { latex: string; display: boolean; x: number; y: number };
+type MathPopup = { latex: string; display: boolean };
 
 /**
  * Renders a Markdown block (GFM tables, LaTeX math).
@@ -295,120 +296,172 @@ export const MarkdownView = memo(function MarkdownView({
     } : undefined,
     [artifacts?.settings, artifacts?.conversationId, artifacts?.showToast, artifacts?.quoteFile],
   );
-  const [menu, setMenu] = useState<MathMenu | null>(null);
+  const [popup, setPopup] = useState<MathPopup | null>(null);
   const [copied, setCopied] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const closeTimer = useRef<number | null>(null);
+  const popupRef = useRef<HTMLDivElement | null>(null);
+  const copiedTimer = useRef<number | null>(null);
 
-  const closeMenu = useCallback(() => {
-    if (closeTimer.current !== null) {
-      window.clearTimeout(closeTimer.current);
-      closeTimer.current = null;
+  const closePopup = useCallback(() => {
+    if (copiedTimer.current !== null) {
+      window.clearTimeout(copiedTimer.current);
+      copiedTimer.current = null;
     }
-    setMenu(null);
+    setPopup(null);
     setCopied(false);
   }, []);
 
   useEffect(() => {
-    if (!menu) return;
-    // Focus the menu itself, not its first item. autofocus on the item made Chrome treat it as
-    // :focus-visible, so "Copy LaTeX" looked selected the moment the menu opened and stayed that
-    // way after the pointer left; an ARIA menu focuses the container instead, and Tab reaches the
-    // items with a real keyboard ring.
-    menuRef.current?.focus();
-    const onPointerDown = (e: PointerEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) closeMenu();
-    };
+    if (!popup) return;
+    // Focus the dialog itself, not its first button. autofocus on the button made Chrome treat it
+    // as :focus-visible, so a control looked pre-selected the moment the popup opened and stayed
+    // that way after the pointer left; a dialog focuses the container instead, and Tab reaches
+    // the buttons with a real keyboard ring.
+    popupRef.current?.focus();
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // Capture + preventDefault: the popup must close without also cancelling an inline edit
+        // underneath it (same reasoning as the image lightbox).
+        e.preventDefault();
         e.stopPropagation();
-        closeMenu();
+        closePopup();
       }
     };
-    // The panel list scrolls under the fixed menu; keep it from floating over unrelated content.
-    const onScroll = () => closeMenu();
-    document.addEventListener('pointerdown', onPointerDown, true);
+    // The panel list scrolls under the fixed scrim; close instead of floating over unrelated
+    // content. Scrolling the source block itself is part of the popup, so leave it alone.
+    const onScroll = (e: Event) => {
+      if (popupRef.current?.contains(e.target as Node)) return;
+      closePopup();
+    };
     document.addEventListener('keydown', onKeyDown, true);
     document.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', onScroll);
     return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('keydown', onKeyDown, true);
       document.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onScroll);
     };
-  }, [menu, closeMenu]);
+  }, [popup, closePopup]);
 
-  const onContextMenu = (e: ReactMouseEvent<HTMLDivElement>) => {
+  const onMathClick = (e: ReactMouseEvent<HTMLDivElement>) => {
+    // A double-click selects a word inside the formula; it must not flash the popup open.
+    if (e.detail > 1) return;
     const target = e.target as HTMLElement | null;
-    const katex = target?.closest('.katex');
-    if (!katex || !e.currentTarget.contains(katex)) return;
+    const katexEl = target?.closest('.katex');
+    if (!katexEl || !e.currentTarget.contains(katexEl)) return;
     // rehype-katex keeps the original source in the MathML annotation, so no second parser is needed.
-    const latex = katex.querySelector('annotation[encoding="application/x-tex"]')?.textContent?.trim();
+    const latex = katexEl.querySelector('annotation[encoding="application/x-tex"]')?.textContent?.trim();
     if (!latex) return;
-    e.preventDefault();
-    e.stopPropagation();
     setCopied(false);
-    setMenu({
-      latex,
-      display: Boolean(katex.closest('.katex-display')),
-      x: e.clientX,
-      y: e.clientY,
-    });
+    setPopup({ latex, display: Boolean(katexEl.closest('.katex-display')) });
   };
 
   const copyLatex = () => {
-    if (!menu) return;
-    void navigator.clipboard
-      .writeText(menu.latex)
-      .then(() => {
+    if (!popup) return;
+    void navigator.clipboard.writeText(popup.latex).then(
+      () => {
         setCopied(true);
-        closeTimer.current = window.setTimeout(closeMenu, 800);
-      })
-      .catch(() => closeMenu());
+        if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+        copiedTimer.current = window.setTimeout(() => {
+          setCopied(false);
+          copiedTimer.current = null;
+        }, 1400);
+      },
+      () => {
+        // Clipboard can fail (denied permission); the source block below stays selectable,
+        // so the user can copy manually — no toast plumbing is worth it here.
+        setCopied(false);
+      },
+    );
   };
 
   const quoteLatex = () => {
-    if (!menu) return;
+    if (!popup) return;
     // Keep the delimiters as the math marker: editorDom turns this into a Unicode chip label and
     // stores the original LaTeX in a <pageask-quote> chip; the backend converts stored chips to
     // Markdown blockquotes when building the request.
-    const source = (menu.display ? '$$' : '$') + menu.latex + (menu.display ? '$$' : '$');
-    closeMenu();
+    const source = (popup.display ? '$$' : '$') + popup.latex + (popup.display ? '$$' : '$');
+    closePopup();
     onQuoteMath?.(source);
   };
+
+  // Render with the same options as the answer (rehypePlugins above) so the preview matches, and
+  // with displayMode mirroring where the formula sits in the answer.
+  const popupHtml = useMemo(
+    () =>
+      popup
+        ? katex.renderToString(popup.latex, {
+            throwOnError: false,
+            strict: false,
+            output: 'htmlAndMathml',
+            displayMode: popup.display,
+          })
+        : '',
+    [popup],
+  );
 
   return (
     <BaseUrlContext.Provider value={baseUrl}>
       <ArtifactRenderContext.Provider value={artifactContext}>
-        <div className="md" onContextMenu={onContextMenu}>
+        <div className="md" onClick={onMathClick}>
           {split.blocks.map((block, index) => (
             <MarkdownBlock key={index} text={block} artifacts={artifactsEnabled} />
           ))}
           {tailRender ? <MarkdownBlock key="tail" text={tailRender} artifacts={artifactsEnabled} /> : null}
         </div>
       </ArtifactRenderContext.Provider>
-      {menu &&
+      {popup &&
         createPortal(
+          // Click-to-close lives on the scrim with an exact-target check, not on a document
+          // pointerdown listener: React portals bubble synthetic clicks through the component
+          // tree, and a listener would see the very click that opened the popup.
           <div
-            ref={menuRef}
-            className="math-menu"
-            role="menu"
-            tabIndex={-1}
-            aria-label={t('math.menu')}
-            style={{
-              left: Math.max(8, Math.min(menu.x, window.innerWidth - 168)),
-              top: Math.max(8, Math.min(menu.y, window.innerHeight - 96)),
+            className="math-pop-scrim"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) closePopup();
             }}
           >
-            <button type="button" role="menuitem" onClick={copyLatex}>
-              {copied ? t('math.copied') : t('math.copy')}
-            </button>
-            {onQuoteMath && (
-              <button type="button" role="menuitem" onClick={quoteLatex}>
-                {t('math.quote')}
-              </button>
-            )}
+            <div
+              ref={popupRef}
+              className="math-pop"
+              role="dialog"
+              aria-modal="true"
+              aria-label={t('math.view')}
+              tabIndex={-1}
+            >
+              <div className="math-pop-bar">
+                {onQuoteMath && (
+                  <button
+                    type="button"
+                    className="math-pop-btn"
+                    title={t('math.quote')}
+                    aria-label={t('math.quote')}
+                    onClick={quoteLatex}
+                  >
+                    <IconQuote />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="math-pop-btn"
+                  title={copied ? t('math.copied') : t('math.copy')}
+                  aria-label={copied ? t('math.copied') : t('math.copy')}
+                  onClick={copyLatex}
+                >
+                  {copied ? <IconCheck /> : <IconCopy />}
+                </button>
+                <button
+                  type="button"
+                  className="math-pop-btn"
+                  title={t('math.close')}
+                  aria-label={t('math.close')}
+                  onClick={closePopup}
+                >
+                  <IconClose />
+                </button>
+              </div>
+              <div className="math-pop-body" dangerouslySetInnerHTML={{ __html: popupHtml }} />
+              <pre className="math-pop-src">{popup.latex}</pre>
+            </div>
           </div>,
           document.body,
         )}

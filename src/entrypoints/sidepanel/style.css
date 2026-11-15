@@ -166,6 +166,14 @@ body {
 
 /* ---------- header ---------- */
 
+/* The header stays in flow and anchors the floating panels: absolute positioning against this
+   wrapper drops them right below the header whatever its exact height, and opening them never
+   squeezes the conversation underneath. */
+.hd-area {
+  position: relative;
+  flex: 0 0 auto;
+}
+
 .hd {
   display: flex;
   align-items: center;
@@ -262,7 +270,60 @@ button.primary.save:hover:not(:disabled) {
   border-color: var(--line);
 }
 
+/* Header buttons are icon-only: 16px glyph (+ the history count badge), name carried by aria-label/title */
+.hd-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+}
+
+.hd-badge {
+  /* Inherits the button color: dim in idle, full-strength when the panel is open (.on) */
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 600;
+}
+
+/* Settings/history panels drop as one strip anchored to the header's bottom edge (.hd-area is
+   relative); the strip covers the conversation instead of pushing it down, and its measured height
+   drives the page card's glide and the list's reserved top space (reserve animator in App.tsx). */
+.hd-drop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+}
+
+/* Dropdown panels pop in fast and settle soft: easeOutExpo front-loads the motion so the expand
+   reads in a single frame yet lands without a hard stop. Open-only — the panels unmount on close. */
+@keyframes drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scaleY(0.96);
+  }
+}
+
+.settings,
+.convs {
+  transform-origin: top center;
+  animation: drop-in 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* ---------- page card ---------- */
+
+/* The page card (and the page-failure card) float above the conversation instead of occupying a
+   flow slot; App.tsx keeps the list's top padding at the card's height (plus the open dropdown's),
+   so the first messages are never hidden behind the overlays when scrolled to the top. The top
+   offset is applied imperatively (reserve animator), 0 here is only the pre-measure default. */
+.page-float {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 25;
+}
 
 .page {
   flex: 0 0 auto;
@@ -1114,9 +1175,11 @@ button.primary.save:hover:not(:disabled) {
   max-width: 100%;
   margin-inline: auto;
   border-radius: 4px;
+  cursor: pointer;
+  outline: 1px solid transparent;
   transition:
     background-color 0.12s ease,
-    box-shadow 0.12s ease;
+    outline-color 0.12s ease;
 }
 
 /* Same reason one level down: the inner block is full width too, so a formula wider than the panel
@@ -1142,69 +1205,132 @@ button.primary.save:hover:not(:disabled) {
   display: inline-block;
   font-size: 1.1em;
   border-radius: 4px;
-  cursor: context-menu;
+  cursor: pointer;
+  outline: 1px solid transparent;
   transition:
     background-color 0.12s ease,
-    box-shadow 0.12s ease;
+    outline-color 0.12s ease;
 }
 
-/* Hover is the only hint that a formula has a right-click menu; keep it soft so reading stays calm */
+/* Hover hint: darkened fill + a hairline outline, no shadow. Outline (not border) keeps the layout
+   still, and unlike a box-shadow it is not clipped by the display box's own overflow. */
 .md .katex:hover {
   background: color-mix(in srgb, var(--fg) 6%, transparent);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--fg) 16%, transparent);
+  outline-color: color-mix(in srgb, var(--fg) 25%, transparent);
 }
 
-/* Display formulas take the ring on the scroll box: a box-shadow on the scrolled element is clipped
-   by that same overflow, which is exactly what made the shadow look cut off mid-formula. */
+/* Display formulas take the hint on the scroll box; the inner .katex stays quiet so the formula
+   does not get a double ring. */
 .md .katex-display:hover {
   background: color-mix(in srgb, var(--fg) 6%, transparent);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--fg) 16%, transparent);
+  outline-color: color-mix(in srgb, var(--fg) 25%, transparent);
 }
 
 .md .katex-display .katex:hover {
   background: none;
-  box-shadow: none;
+  outline-color: transparent;
 }
 
-/* Fixed and portaled to <body>: the side panel scrolls and clips its own children */
-.math-menu {
+/* Formula popup: scrim + centered dialog, portaled to <body> (the side panel scrolls and clips
+   its own children). The z-index sits above the artifact preview (60) — artifacts render
+   MarkdownView too, so a formula clicked there must stack over that overlay — and below the
+   topmost confirm overlay (100). */
+.math-pop-scrim {
   position: fixed;
-  z-index: 50;
-  display: flex;
-  min-width: 148px;
-  flex-direction: column;
-  gap: 2px;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--card);
-  box-shadow: 0 8px 28px color-mix(in srgb, #000 24%, transparent);
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  /* The track must be capped at the panel width: an auto track sizes to the item's intrinsic
+     width, a scroll container's intrinsic width is computed as if overflow were visible, so the
+     formula would stretch the dialog past the panel and the body's overflow-x never kicked in. */
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  padding: 16px;
+  background: var(--scrim);
 }
 
-/* The menu is what takes focus when it opens (see MarkdownView), so no item looks pre-selected; the
-   container itself is not an interactive target and must not draw a focus ring around the panel. */
-.math-menu:focus,
-.math-menu:focus-visible {
+.math-pop {
+  width: 100%;
+  max-width: 420px;
+  padding: 8px 12px 12px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.24);
+}
+
+/* The dialog is what takes focus when it opens (see MarkdownView), so no control looks
+   pre-selected; the container itself is not an interactive target and must not draw a ring. */
+.math-pop:focus,
+.math-pop:focus-visible {
   outline: none;
 }
 
-.math-menu button {
-  width: 100%;
-  padding: 7px 10px;
+.math-pop-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.math-pop-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--icon-btn);
+  height: var(--icon-btn);
+  padding: 0;
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--fg);
-  font: inherit;
-  text-align: left;
-  white-space: nowrap;
-  cursor: pointer;
+  color: var(--muted);
 }
 
-.math-menu button:hover,
-.math-menu button:focus-visible {
+/* button.* specificity: the global `button:hover:not(:disabled)` tint would otherwise wash them out */
+button.math-pop-btn:hover:not(:disabled),
+.math-pop-btn:focus-visible {
   background: color-mix(in srgb, var(--fg) 8%, transparent);
+  color: var(--fg);
   outline: none;
+}
+
+/* Slightly larger than the answer text: the popup is where a cramped formula goes to be read */
+.math-pop-body {
+  padding: 2px 0 10px;
+  font-size: 1.15em;
+  text-align: center;
+  overflow-x: auto;
+}
+
+/* The answer styles scope .katex-display under .md, so inside the modal KaTeX's default margins
+   come back; flatten them and let an over-wide formula scroll instead of blowing out the dialog. */
+.math-pop-body .katex-display {
+  margin: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Same fix as the answer's display math: the inner block must measure to the formula
+   (`max-content`) or an over-wide formula is centered inside a 100%-wide box and its left end
+   lands at a negative offset no scroll can reach; the 2px padding absorbs KaTeX's `.vlist-s`
+   strut so the scroll box does not overflow by exactly 2px. */
+.math-pop-body .katex-display > .katex {
+  display: block;
+  width: max-content;
+  padding-right: 2px;
+}
+
+.math-pop-src {
+  max-height: 140px;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
 }
 
 /* ---------- composer ---------- */
@@ -2499,6 +2625,23 @@ button.quote-btn .icon {
 
 .round[open] > summary::before {
   transform: translateY(-1px) rotate(90deg);
+}
+
+/* Expand animation, the same fast ease-out drop as the header dropdowns. Visual-only
+   (opacity/transform): layout height still settles in one frame, so the bottom-spacer +
+   center-lock scroll model is never fed a mid-animation size. Open-only — closing is
+   instant, matching the dropdown panels. The body is rekeyed on every open (RoundPanel),
+   so the animation replays on manual expand too, not just while streaming. */
+@keyframes round-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+.round[open] .think-text,
+.round[open] .step {
+  animation: round-drop 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .round .think-text {

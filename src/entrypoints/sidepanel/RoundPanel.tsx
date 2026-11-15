@@ -26,6 +26,21 @@ export function ThinkingFade({ show }: { show: boolean }) {
 export function RoundPanel({ active, summary, children }: { active: boolean; summary: ReactNode; children: ReactNode }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const wasActive = useRef(active);
+  // Bumped every time the block opens; rekeys the body so the expand animation replays. A plain
+  // `.round[open]` animation is not enough: Chromium ≥131 keeps closed-<details> content rendered
+  // (content-visibility: hidden on ::details-content), so the animation survives the collapse
+  // (fill mode both) and never restarts on reopen.
+  const [openEpoch, setOpenEpoch] = useState(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onToggle = () => {
+      if (el.open) setOpenEpoch((epoch) => epoch + 1);
+    };
+    el.addEventListener('toggle', onToggle);
+    return () => el.removeEventListener('toggle', onToggle);
+  }, []);
 
   useEffect(() => {
     if (wasActive.current === active) return;
@@ -36,7 +51,9 @@ export function RoundPanel({ active, summary, children }: { active: boolean; sum
   return (
     <details ref={ref} className="round" open={active}>
       <summary>{summary}</summary>
-      {children}
+      <div className="round-body" key={openEpoch}>
+        {children}
+      </div>
     </details>
   );
 }

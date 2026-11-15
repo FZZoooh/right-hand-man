@@ -36,7 +36,6 @@ export const enUS = {
   'history.empty': 'No chats yet',
   'history.untitled': 'Untitled',
   'history.count': ', {count} turns',
-  'history.titleWithCount': 'History {count}',
   'history.delete': 'Delete this chat',
   'history.deleteConfirm': 'Delete this chat? This cannot be undone.',
   'history.deleteCancel': 'Cancel',
@@ -178,11 +177,12 @@ export const enUS = {
   'quote.action': 'Quote',
   'quote.action.title': 'Quote this answer in a follow-up',
 
-  // Right-click menu on a formula
-  'math.menu': 'Formula actions',
+  // Click popup for a formula
+  'math.view': 'View formula',
   'math.copy': 'Copy LaTeX',
   'math.copied': 'Copied',
   'math.quote': 'Quote',
+  'math.close': 'Close',
 
   // Code block header (language label + copy button)
   'code.copy': 'Copy code',

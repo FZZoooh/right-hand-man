@@ -38,7 +38,6 @@ export const zhCN = {
   'history.empty': '还没有记录',
   'history.untitled': '无标题',
   'history.count': '共 {count} 轮',
-  'history.titleWithCount': '历史 {count}',
   'history.delete': '删除这段对话',
   'history.deleteConfirm': '删除这段对话？操作不可撤销',
   'history.deleteCancel': '取消',
@@ -182,11 +181,12 @@ export const zhCN = {
   'quote.action': '引用',
   'quote.action.title': '引用回答以追问',
 
-  // 回答里公式的右键菜单
-  'math.menu': '公式操作',
+  // 回答里公式的点击浮窗
+  'math.view': '查看公式',
   'math.copy': '复制 LaTeX',
   'math.copied': '已复制',
   'math.quote': '引用',
+  'math.close': '关闭',
 
   // 代码块头部（语言标签 + 复制按钮）
   'code.copy': '复制',

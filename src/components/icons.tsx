@@ -102,6 +102,41 @@ export function IconEdit(_props: Props) {
   );
 }
 
+/** New chat: speech bubble with a plus inside */
+export function IconNewChat(_props: Props) {
+  return (
+    <svg {...base} stroke="currentColor" strokeWidth={1.4} fill="none">
+      <path
+        d="M13.6 7.4a5.6 5.2 0 0 1-5.6 5.2c-.6 0-1.2-.1-1.7-.2L2.8 13.9l1-2.6A5.1 5.1 0 0 1 2.4 7.8C2.4 4.8 4.9 2.6 8 2.6s5.6 2 5.6 4.8Z"
+        strokeLinejoin="round"
+      />
+      <path d="M8 5.4v4M6 7.4h4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** History: clock hands with a counterclockwise arrow (mirror of IconReload's sweep) */
+export function IconHistory(_props: Props) {
+  return (
+    <svg {...base} stroke="currentColor" strokeWidth={1.4} fill="none">
+      <path d="M3 8a5 5 0 1 0 1.6-3.7" strokeLinecap="round" />
+      <path d="M2.8 2.4v2.9h2.9" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 5.2V8l1.9 1.9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Settings: two sliders with knobs */
+export function IconSettings(_props: Props) {
+  return (
+    <svg {...base} stroke="currentColor" strokeWidth={1.4} fill="none">
+      <path d="M2.6 4.6h5.7M11.3 4.6h2.1M2.6 11.4h1.5M7.1 11.4h6.3" strokeLinecap="round" />
+      <circle cx="9.8" cy="4.6" r="1.5" />
+      <circle cx="5.6" cy="11.4" r="1.5" />
+    </svg>
+  );
+}
+
 /** Regenerate: circular arrow */
 export function IconReload(_props: Props) {
   return (
