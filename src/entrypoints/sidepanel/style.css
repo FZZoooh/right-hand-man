@@ -287,7 +287,7 @@ button.primary.save:hover:not(:disabled) {
 
 /* Settings/history panels drop as one strip anchored to the header's bottom edge (.hd-area is
    relative); the strip covers the conversation instead of pushing it down, and its measured height
-   drives the page card's glide and the list's reserved top space (reserve animator in App.tsx). */
+   sets the page card's offset and the list's reserved top space (layout effect in App.tsx). */
 .hd-drop {
   position: absolute;
   top: calc(100% + 4px);
@@ -296,27 +296,17 @@ button.primary.save:hover:not(:disabled) {
   z-index: 30;
 }
 
-/* Dropdown panels pop in fast and settle soft: easeOutExpo front-loads the motion so the expand
-   reads in a single frame yet lands without a hard stop. Open-only — the panels unmount on close. */
-@keyframes drop-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px) scaleY(0.96);
-  }
-}
-
-.settings,
-.convs {
-  transform-origin: top center;
-  animation: drop-in 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
+/* Dropdown panels do not fade in: the strip's height grows from 0 (WAAPI in App.tsx) while the
+   panel stays fully opaque, so conversation text never flashes through a translucent panel and
+   the page card below rides the same growth via the ResizeObserver. Open-only — the panels
+   unmount on close. */
 
 /* ---------- page card ---------- */
 
 /* The page card (and the page-failure card) float above the conversation instead of occupying a
    flow slot; App.tsx keeps the list's top padding at the card's height (plus the open dropdown's),
    so the first messages are never hidden behind the overlays when scrolled to the top. The top
-   offset is applied imperatively (reserve animator), 0 here is only the pre-measure default. */
+   offset is applied imperatively (layout effect in App.tsx), 0 here is only the pre-measure default. */
 .page-float {
   position: absolute;
   top: 0;
@@ -367,6 +357,15 @@ button.primary.save:hover:not(:disabled) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Wrapper for the page card's revealed text block. Permanent overflow: hidden makes it a block
+   formatting context, so .card-head's top margin is contained on every frame of the WAAPI height
+   expansion (PageCard.tsx) instead of collapsing through once the animation ends — the measured
+   scrollHeight and the final auto height stay equal, and the reveal clips top-down like the
+   header dropdowns. */
+.page-reveal {
+  overflow: hidden;
 }
 
 .card {

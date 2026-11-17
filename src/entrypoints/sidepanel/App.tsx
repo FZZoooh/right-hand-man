@@ -171,12 +171,6 @@ export default function App() {
   const [pageState, setPageState] = useState<PageState>({ kind: 'loading' });
   const [showPageText, setShowPageText] = useState(false);
   const [copied, setCopied] = useState(false);
-  // Height of the floating page card (or page-failure card): the conversation list reserves this
-  // much top space so the first messages are never hidden behind the overlay at scroll top.
-  const [pageFloatH, setPageFloatH] = useState(0);
-  // Height of the open dropdown panel (0 when both are closed), measured on the .hd-drop strip.
-  const [dropH, setDropH] = useState(0);
-
   const [settings, setSettings] = useState<Settings | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Set when the backend just generated the title: runs the left-to-right fade once, not on history loads */
@@ -1423,114 +1417,90 @@ export default function App() {
     return () => observer.disconnect();
   }, []);
 
-  // The page card / page-failure card floats above the conversation. Two measurements drive the
-  // layout: the open dropdown panel's height (dropH) and the card's collapsed height (pageFloatH —
-  // the expanded page-text preview is an overlay the user deliberately opened, so it does not grow
-  // the reservation). The card sits dropH below the list top and the list reserves
-  // dropH + cardH + 8 of top padding, so the header → panel → card → message chain keeps its gaps
-  // and nothing is hidden at scroll top.
+  // The page card / page-failure card floats above the conversation; an open dropdown panel pushes
+  // it down. Two measurements drive the layout: the dropdown strip's height and the card's
+  // collapsed height (the expanded page-text preview is an overlay the user deliberately opened,
+  // so it does not grow the reservation). The card sits a fixed gap below the panel and the list
+  // reserves dropH + cardH + 8 of top padding, so the header → panel → card → message chain keeps
+  // its gaps and nothing is hidden at scroll top.
   const pageFloatRef = useRef<HTMLDivElement | null>(null);
   const dropRef = useRef<HTMLDivElement | null>(null);
   const showPageTextRef = useRef(false);
   showPageTextRef.current = showPageText;
-  useLayoutEffect(() => {
-    const el = pageFloatRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') {
-      setPageFloatH(0);
-      return;
-    }
-    const measure = () => {
-      if (!showPageTextRef.current) setPageFloatH(el.offsetHeight);
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [pageState, verbose]);
-
-  useLayoutEffect(() => {
-    const el = dropRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') {
-      setDropH(0);
-      return;
-    }
-    const measure = () => setDropH(el.offsetHeight);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  // When a dropdown opens/closes, the card and the reserved top space glide together (same 140ms
-  // easeOutExpo as the panel drop-in) instead of jumping. The scroll position is compensated per
-  // frame: at the top everything slides as one chain, deeper down the reading content stays put
-  // while the card glides over it like any overlay. Both values are applied imperatively —
-  // render-driven styles would snap when a streaming re-render lands mid-animation.
+  const cardHRef = useRef(0);
   const reserveRef = useRef(0);
-  const cardTopRef = useRef(0);
-  const prevDropHRef = useRef<number | null>(null);
-  const reserveAnimRef = useRef<number | null>(null);
   useLayoutEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-    if (reserveAnimRef.current != null) {
-      cancelAnimationFrame(reserveAnimRef.current);
-      reserveAnimRef.current = null;
-    }
-    const targetTop = dropH;
-    const targetReserve = pageFloatH > 0 ? dropH + pageFloatH + 8 : 0;
-    const fromReserve = reserveRef.current;
-    const fromTop = cardTopRef.current;
-    const apply = (pad: number, top: number) => {
+    const list = listRef.current;
+    if (!list) return;
+    const apply = () => {
+      const cardEl = pageFloatRef.current;
+      const dropH = dropRef.current?.offsetHeight ?? 0;
+      if (cardEl && !showPageTextRef.current) cardHRef.current = cardEl.offsetHeight;
+      const cardH = cardEl ? cardHRef.current : 0;
+      const pad = cardH > 0 ? dropH + cardH + 8 : 0;
+      const grow = pad - reserveRef.current;
       reserveRef.current = pad;
-      cardTopRef.current = top;
-      el.style.paddingTop = pad > 0 ? `${Math.round(pad)}px` : '';
-      if (pageFloatRef.current) pageFloatRef.current.style.top = `${Math.round(top)}px`;
+      // Capture before the padding write: shrinking the reserve can clamp scrollTop once the
+      // smaller scrollHeight lands, and the shrink compensation needs the pre-change value.
+      const prevTop = list.scrollTop;
+      list.style.paddingTop = pad > 0 ? `${Math.round(pad)}px` : '';
+      if (cardEl) cardEl.style.top = `${Math.round(dropH)}px`;
       syncContentHeight();
-      refreshScrollBtn(el);
-    };
-
-    const dropChanged = prevDropHRef.current !== null && prevDropHRef.current !== dropH;
-    prevDropHRef.current = dropH;
-    const instant =
-      !dropChanged ||
-      pageFloatH === 0 ||
-      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
-    if (instant) {
-      // Growing without animation: scroll along so the reading content stays put; shrinking needs
-      // nothing — the browser clamps scrollTop as the content pulls up.
-      const grow = targetReserve - fromReserve;
-      apply(targetReserve, targetTop);
-      if (grow > 0) scrollTo(el, el.scrollTop + Math.min(grow, el.scrollTop));
-      return;
-    }
-
-    const delta = targetReserve - fromReserve;
-    const startTop = el.scrollTop;
-    const shift = delta > 0 ? Math.min(delta, startTop) : 0;
-    const start = performance.now();
-    const duration = 140;
-    const tick = (now: number) => {
-      const p = Math.min(1, (now - start) / duration);
-      const eased = p >= 1 ? 1 : 1 - Math.pow(2, -10 * p);
-      apply(fromReserve + delta * eased, fromTop + (targetTop - fromTop) * eased);
-      if (shift > 0) scrollTo(el, startTop + shift * eased);
-      if (p < 1) {
-        reserveAnimRef.current = requestAnimationFrame(tick);
-      } else {
-        reserveAnimRef.current = null;
-        apply(targetReserve, targetTop);
-        if (shift > 0) scrollTo(el, startTop + shift);
+      // The card travels with the menu at its fixed spacing. During the strip's 140ms height
+      // expansion (see the openPanel effect below) this runs per frame — the ResizeObserver fires
+      // on every animated height step — so the card and the reserved padding stay glued to the
+      // strip's visible edge and no painted frame shows the panel up before the content made room.
+      // Scroll by the full growth whenever the list is scrolled past its top, so the reading
+      // content stays put and the panel reads as a floating overlay; at the very top stay at 0 so
+      // the growth pushes the content down instead. Capping the compensation at the current
+      // scrollTop (an earlier min(grow, scrollTop)) under-corrects mid-scroll positions and the
+      // text visibly drifts while the panel expands. Grow reads scrollTop after the padding write —
+      // growth never clamps, and the target only fits the already-grown scroll range; shrink uses
+      // the pre-write value because the browser clamps scrollTop only after the new layout lands,
+      // and compensating from the clamped value would double-subtract.
+      if (grow > 0) {
+        if (list.scrollTop > 0) scrollTo(list, list.scrollTop + grow);
+      } else if (grow < 0 && prevTop > 0) {
+        scrollTo(list, prevTop + grow);
       }
+      refreshScrollBtn(list);
     };
-    reserveAnimRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (reserveAnimRef.current != null) {
-        cancelAnimationFrame(reserveAnimRef.current);
-        reserveAnimRef.current = null;
-      }
-    };
-  }, [dropH, pageFloatH, scrollTo, syncContentHeight]);
+    apply();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(apply);
+    if (dropRef.current) ro.observe(dropRef.current);
+    if (pageFloatRef.current) ro.observe(pageFloatRef.current);
+    return () => ro.disconnect();
+    // settingsOpen/historyOpen swap the dropdown panel; pageState/verbose remount the card;
+    // showPageText toggles the overlay preview (the reservation keeps the collapsed height).
+  }, [settingsOpen, historyOpen, pageState, verbose, showPageText, scrollTo, syncContentHeight, refreshScrollBtn]);
+
+  // The dropdown reveals by growing the strip's height from 0 — never by fading: a translucent
+  // panel lets the conversation behind it flash through, and a full-height mount would make the
+  // page card jump before the panel is even visible. The strip stays fully opaque the whole time
+  // while overflow clipping reveals it top-down, and the ResizeObserver above re-applies the card
+  // offset and the list padding on every animated frame, so the card rides the same growth.
+  // Open-only: closing still unmounts instantly.
+  const openPanel = settingsOpen ? 'settings' : historyOpen ? 'history' : null;
+  const prevPanelRef = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const prev = prevPanelRef.current;
+    prevPanelRef.current = openPanel;
+    const el = dropRef.current;
+    if (!openPanel || prev === openPanel || !el || typeof el.animate !== 'function') return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const height = el.scrollHeight;
+    if (height <= 0) return;
+    el.animate(
+      [
+        { height: '0px', overflow: 'hidden' },
+        { height: `${height}px`, overflow: 'hidden' },
+      ],
+      // Same 140ms easeOutExpo the old fade used: front-loads the motion so the expand reads in a
+      // single frame yet lands without a hard stop.
+      { duration: 140, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' },
+    );
+  }, [openPanel]);
 
   // Measure natural text height before applying flex fill or interpolating the whole box. Expanded
   // mode never auto-collapses on short text — the button, send, and leaving the page collapse it.
@@ -1689,8 +1659,9 @@ export default function App() {
         </div>
       </header>
 
-      {/* Panels drop as one strip anchored under the header; its height (= the open panel) drives
-          the page card's glide and the list's reserved top space (see the reserve animator). */}
+      {/* Panels drop as one strip anchored under the header; its height (= the open panel) sets
+          the page card's offset and the list's reserved top space (see the layout effect on
+          dropRef/pageFloatRef). */}
       <div ref={dropRef} className="hd-drop">
         {settingsOpen && settings && (
           <SettingsPanel

@@ -433,11 +433,21 @@ export function useConversationScroll({
       for (const child of Array.from(el.children)) {
         if (seen.has(child)) continue;
         seen.add(child);
+        // The two spacers are written by this controller (applySpacer/applyLead), so observing
+        // them re-notifies this very observer within the same frame on every adjustment —
+        // Chrome then reports "ResizeObserver loop completed with undelivered notifications".
+        // Their growth still reaches us through the observed message rows, so skip them.
+        if (child === spacerRef.current || child === leadSpacerRef.current) continue;
         ro.observe(child);
       }
     };
     sync();
-    ro.observe(el);
+    // Border-box on the list: its border-box height is flex-determined, while App.tsx's dropdown
+    // reservation writes paddingTop on it directly — per animation frame while a dropdown
+    // expands. Content-box observation reports every one of those writes back into this observer
+    // in the same frame (the same loop error). Real container resizes (strip growth, composer
+    // expansion, panel resize) still change the border-box and are seen.
+    ro.observe(el, { box: 'border-box' });
     const mo = new MutationObserver(sync);
     mo.observe(el, { childList: true });
     return () => {
