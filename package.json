@@ -35,7 +35,7 @@
     "wxt": "^0.21.5"
   },
   "dependencies": {
-    "defuddle": "^0.19.6",
+    "defuddle": "^0.19.9",
     "fflate": "^0.8.3",
     "highlight.js": "^11.12.0",
     "katex": "0.16.47",
